@@ -1,68 +1,49 @@
 #include "loader.h"
-#include <stdint.h>
-#include <errno.h>
+#include "stdint.h"
+#define ERROR(msg) do { perror(msg); exit(1); } while(0)
+static Elf32_Ehdr *e_hdr;
+static Elf32_Phdr *p_hdr;
+int f;
+static void *virt_mem; 
 
-#define ELF_MAGIC 0x464c457f // Magic number for ELF files
-#define ELF_NIDENT 16
-#define ERROR(msg) fprintf(stderr, msg)
-
-static Elf32_Ehdr *ehdr;
-static Elf32_Phdr *phdr;
-static int fd;
-static int entrypoint;
-void *virt_mem = NULL;
-static void *mapped_file;
-
-#define ERROR(msg) do { printf(msg); exit(1); } while(0)
-
-// Function to check if the ELF file is valid and supported
-void validate_elf_file(const char* exe) {
-    int fd = open(exe, O_RDONLY);  // Open file for reading
-    if (fd < 0) {
-        ERROR("Error opening ELF file\n");
+void free(){
+    if (f > 2){
+        close(f);
     }
-
-    Elf32_Ehdr hdr;
-    check_offset(lseek(fd, 0, SEEK_SET));  // Ensure we are at the beginning
-    if (read(fd, &hdr, sizeof(hdr)) != sizeof(hdr)) {
-        close(fd);
-        ERROR("Error reading ELF header\n");
+    if (e_hdr != NULL){
+        free(e_hdr);
     }
-
-    // Validate ELF magic number and other fields
-    if (hdr.e_ident[0] != 0x7f || hdr.e_ident[1] != 'E' || hdr.e_ident[2] != 'L' || hdr.e_ident[3] != 'F' ||
-        hdr.e_ident[EI_CLASS] != ELFCLASS32 || hdr.e_ident[EI_DATA] != ELFDATA2LSB ||
-        hdr.e_machine != EM_386 || hdr.e_ident[EI_VERSION] != EV_CURRENT ||
-        (hdr.e_type != ET_EXEC && hdr.e_type != ET_REL)) {
-        close(fd);
-        ERROR("Invalid or unsupported ELF file\n");
+    if (p_hdr != NULL){
+        free(p_hdr);
     }
-
+    if (virt_mem != NULL){
+        munmap(virt_mem, p_hdr->p_memsz);  // This will unmap only if virt_mem was successfully mapped
+    }
+}
+void chk_off(off_t offset, const char *error_msg){
+    if (lseek(f, offset, SEEK_SET) == (off_t) -1) {
+        ERROR(error_msg);
+    }
+}
+void verify_ELF(const char* filename) {
+    f = open(filename, O_RDONLY);  // Open file for reading
+    if (f < 0) {
+        ERROR("Error opening ELF file");
+    }
+    Elf32_Ehdr t_hdr;
+    chk_off(0, "Error seeking to the beginning of the file");
+    if (read(f, &t_hdr, sizeof(t_hdr)) != sizeof(t_hdr)) {
+        close(f);
+        ERROR("Error reading ELF header");
+    }
+    // Valid ELF magic number and other fields
+    if (t_hdr.e_ident[0] != 0x7f || t_hdr.e_ident[1] != 'E' || t_hdr.e_ident[2] != 'L' || t_hdr.e_ident[3] != 'F' ||
+        t_hdr.e_ident[EI_CLASS] != ELFCLASS32 || t_hdr.e_ident[EI_DATA] != ELFDATA2LSB ||
+        t_hdr.e_machine != EM_386 || t_hdr.e_ident[EI_VERSION] != EV_CURRENT ||
+        (t_hdr.e_type != ET_EXEC && t_hdr.e_type != ET_REL)) {
+        close(f);
+        ERROR("Invalid or unsupported ELF file");
+    }
     printf("ELF file is valid and supported\n");
-    close(fd);  // Close the file descriptor after validation
+    close(f);  // Closing the file descriptor after validation
 }
-
-
-// Function to check if offset seeking was successful
-void check_offset(off_t new_position) {
-    if (new_position == -1) {
-        ERROR("Failed to seek offset\n");
-    }
-}
-
-/*
- * Release memory and perform other cleanups
- */
-void free_space(){
-    free(ehdr);
-    free(phdr);
-}
-
-// Unmapping virtual mem and closing the file descriptor
-void unmapping_virt_mem(){
-    if (virtual_mem != NULL) {
-        munmap(virtual_mem, phdr[i].p_memsz);
-    }
-    close(fd);
-}
-
