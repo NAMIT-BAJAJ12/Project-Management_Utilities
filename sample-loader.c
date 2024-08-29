@@ -1,113 +1,68 @@
 #include "loader.h"
 #include <stdint.h>
 #include <errno.h>
-// ELF data types
-typedef uint16_t Elf32_Half;
-typedef uint32_t Elf32_Off;
-typedef uint32_t Elf32_Addr;
-typedef uint32_t Elf32_Word;
-typedef int32_t  Elf32_Sword;
 
 #define ELF_MAGIC 0x464c457f // Magic number for ELF files
 #define ELF_NIDENT 16
-
-// ELF Header
-typedef struct {
-    uint8_t     e_ident[ELF_NIDENT];
-    Elf32_Half  e_type;
-    Elf32_Half  e_machine;
-    Elf32_Word  e_version;
-    Elf32_Addr  e_entry;
-    Elf32_Off   e_phoff;
-    Elf32_Off   e_shoff;
-    Elf32_Word  e_flags;
-    Elf32_Half  e_ehsize;
-    Elf32_Half  e_phentsize;
-    Elf32_Half  e_phnum;
-    Elf32_Half  e_shentsize;
-    Elf32_Half  e_shnum;
-    Elf32_Half  e_shstrndx;
-} Elf32_Ehdr;
-
-// Program Header
-typedef struct {
-    Elf32_Word p_type;
-    Elf32_Off  p_offset;
-    Elf32_Addr p_vaddr;
-    Elf32_Addr p_paddr;
-    Elf32_Word p_filesz;
-    Elf32_Word p_memsz;
-    Elf32_Word p_flags;
-    Elf32_Word p_align;
-} Elf32_Phdr;
-
-// Section Header
-typedef struct {
-    Elf32_Word sh_name;
-    Elf32_Word sh_type;
-    Elf32_Word sh_flags;
-    Elf32_Addr sh_addr;
-    Elf32_Off  sh_offset;
-    Elf32_Word sh_size;
-    Elf32_Word sh_link;
-    Elf32_Word sh_info;
-    Elf32_Word sh_addralign;
-    Elf32_Word sh_entsize;
-} Elf32_Shdr;
-
-// Error macro
 #define ERROR(msg) fprintf(stderr, msg)
-
-// Function prototypes
-static bool elf_check_file(Elf32_Ehdr *hdr);
-static bool elf_check_supported(Elf32_Ehdr *hdr);
-static inline Elf32_Shdr *elf_sheader(Elf32_Ehdr *hdr);
-static inline Elf32_Shdr *elf_section(Elf32_Ehdr *hdr, int idx);
 
 static Elf32_Ehdr *ehdr;
 static Elf32_Phdr *phdr;
 static int fd;
+static int entrypoint;
+void *virt_mem = NULL;
 static void *mapped_file;
 
-/*
- * Checking if the ELF file is valid
- */
-static bool elf_check_file(Elf32_Ehdr *hdr) {
-    if (!hdr) return false;
-    if (hdr->e_ident[0] != 0x7f || hdr->e_ident[1] != 'E' || hdr->e_ident[2] != 'L' || hdr->e_ident[3] != 'F') {
-        ERROR("ELF Header magic number incorrect.\n");
-        return false;
+#define ERROR(msg) do { printf(msg); exit(1); } while(0)
+
+// Function to check if the ELF file is valid and supported
+void validate_elf_file(const char* exe) {
+    int fd = open(exe, O_RDONLY);  // Open file for reading
+    if (fd < 0) {
+        ERROR("Error opening ELF file\n");
     }
-    return true;
+
+    Elf32_Ehdr hdr;
+    check_offset(lseek(fd, 0, SEEK_SET));  // Ensure we are at the beginning
+    if (read(fd, &hdr, sizeof(hdr)) != sizeof(hdr)) {
+        close(fd);
+        ERROR("Error reading ELF header\n");
+    }
+
+    // Validate ELF magic number and other fields
+    if (hdr.e_ident[0] != 0x7f || hdr.e_ident[1] != 'E' || hdr.e_ident[2] != 'L' || hdr.e_ident[3] != 'F' ||
+        hdr.e_ident[EI_CLASS] != ELFCLASS32 || hdr.e_ident[EI_DATA] != ELFDATA2LSB ||
+        hdr.e_machine != EM_386 || hdr.e_ident[EI_VERSION] != EV_CURRENT ||
+        (hdr.e_type != ET_EXEC && hdr.e_type != ET_REL)) {
+        close(fd);
+        ERROR("Invalid or unsupported ELF file\n");
+    }
+
+    printf("ELF file is valid and supported\n");
+    close(fd);  // Close the file descriptor after validation
+}
+
+
+// Function to check if offset seeking was successful
+void check_offset(off_t new_position) {
+    if (new_position == -1) {
+        ERROR("Failed to seek offset\n");
+    }
 }
 
 /*
- * Checking if the ELF file is supported
+ * Release memory and perform other cleanups
  */
-static bool elf_check_supported(Elf32_Ehdr *hdr) {
-    if (!elf_check_file(hdr)) {
-        ERROR("Invalid ELF File.\n");
-        return false;
-    }
-    if (hdr->e_ident[4] != 1) { // ELF32
-        ERROR("Unsupported ELF File Class.\n");
-        return false;
-    }
-    if (hdr->e_ident[5] != 1) { // Little-endian
-        ERROR("Unsupported ELF File byte order.\n");
-        return false;
-    }
-    if (hdr->e_machine != 3) { // Intel 80386
-        ERROR("Unsupported ELF File target.\n");
-        return false;
-    }
-    if (hdr->e_ident[6] != 1) { // Current version
-        ERROR("Unsupported ELF File version.\n");
-        return false;
-    }
-    if (hdr->e_type != 2 && hdr->e_type != 3) { // Executable or relocatable
-        ERROR("Unsupported ELF File type.\n");
-        return false;
-    }
-    return true;
+void free_space(){
+    free(ehdr);
+    free(phdr);
 }
+
+// Unmapping virtual mem and closing the file descriptor
+void unmapping_virt_mem(){
+    if (virtual_mem != NULL) {
+        munmap(virtual_mem, phdr[i].p_memsz);
+    }
+    close(fd);
+}
+
