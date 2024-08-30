@@ -43,7 +43,7 @@ int verify_elf(const char *filename){
     }
 
     // Validate the ELF magic number
-    if (memcmp(elf_chk, e_hdr.e_ident, 4) != 0) {
+    if (memcmp(elf_chk, e_hdr->e_ident, 4) != 0) {
         free(e_hdr);
         ERROR_CLEANUP_EXIT("Invalid or unsupported file type\n");
     }
@@ -104,14 +104,17 @@ void load_and_run_elf(char **exe){
         }
     }
     // End of for loop
+    
+   // 4. Navigate to the entrypoint address into the segment loaded in the memory in above step
+   char *function_entry_point =  (char *)virt_mem + (ehdr->e_entry - phdr->p_vaddr);
+  
+  // 5. Typecast the address to that of function pointer matching "_start" method in fib.c.
+   int (_start)() = (int ()())function_entry_point;
 
-    // 4. Navigate to the entry point address into the segment loaded in the memory in above step
-    char *entry = (char *)virt_mem + (ehdr->e_entry - phdr->p_vaddr);
-    // 5. Typecast the address to that of a function pointer matching "_start" method in fib.c.
-    int (_start)() = (int ()())entry;
-    // 6. Call the "_start" method and print the value returned from the "_start"
-    int result = _start();
-    printf("User _start return value = %d\n", result);
+  // 6. Call the "_start" method and print the value returned from the "_start"
+   int result = _start();  
+   printf("User _start return value = %d\n",result);
+
 }
 int main(int argc, char **argv) {
     if (argc != 2) {
@@ -126,6 +129,6 @@ int main(int argc, char **argv) {
     load_and_run_elf(argv);
     // Invoke the cleanup routine inside the loader  
     loader_cleanup();
-    
+
     return 0;
 }
