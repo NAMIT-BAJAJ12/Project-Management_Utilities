@@ -80,11 +80,14 @@ void load_and_run_elf(char **exe){
    //    type that contains the address of the entrypoint method in fib.c
 
     SEEK(fd, ehdr->e_phoff, SEEK_SET);
-    for (int i = 0; i < ehdr->e_phnum; i++){
+    int k=0;
+    while(k<ehdr->e_phnum){
+    
 
         ssize_t phdr_R = read(fd, phdr, sizeof(Elf32_Phdr));
         if (phdr_R != sizeof(Elf32_Phdr)){
             ERROR_CLEANUP_EXIT("Error in loading phdr header ...");
+        k++;
         }
 
    // 3. Allocate memory of the size "p_memsz" using mmap function 
