@@ -3,7 +3,6 @@ Elf32_Ehdr *ehdr;
 Elf32_Phdr *phdr;
 int fd;
 Elf32_Phdr *virt_mem;
-
 // Macros for error handling, cleanup, and seeking
 #define ERROR(msg) do { printf("%s\n", msg); } while(0)
 #define ERROR_CLEANUP_EXIT(msg) do { printf("%s\n", msg); loader_cleanup(); exit(1); } while(0)
@@ -55,9 +54,8 @@ int verify_elf(const char *filename) {
 Load and run the ELF executable file
 */
 void load_and_run_elf(char **exe){
-
+    
     // 1. Load entire binary content into the memory from the ELF file.
-
     SEEK(fd, 0, SEEK_SET);
     long elf_s = lseek(fd, 0, SEEK_END);
     if (elf_s == -1){
@@ -119,12 +117,9 @@ void load_and_run_elf(char **exe){
     char *entry_p = (char *)virt_mem + (ehdr->e_entry - phdr->p_vaddr);
 
     // 5. Typecast the address to that of function pointer matching "_start" method in fib.c.
-
     typedef int (*start_method)();
     start_method _start = (start_method)entry_p;
-
     // 6. Call the "_start" method and print the value returned from the "_start"
-
     int result = _start();
     printf("User _start return value = %d\n", result);
 }
